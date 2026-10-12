@@ -9,10 +9,11 @@
       "kind": "book", "lang": "en", "site": "https://ranobedb.org", "script": "extensions/ranobedb.js", "contentRating": "SAFE"
     },
     {
-      "id": "nyaa", "name": "Nyaa", "version": "2.0.0", "role": "releases",
+      "id": "nyaa", "name": "Nyaa", "version": "2.1.0", "role": "releases",
       "description": "Literature torrent discovery via RSS. Optional TorBox and search relay are configured in the app.",
       "kind": "book", "site": "https://nyaa.si", "script": "extensions/nyaa.js", "contentRating": "MATURE",
       "releaseOptions": {
+        "coverSource": "ranobedb",
         "relay": true,
         "categories": [{ "id": "3_0", "label": "All literature" }, { "id": "3_1", "label": "English-translated literature" }, { "id": "3_3", "label": "Japanese raw literature / manga" }, { "id": "3_2", "label": "Other translated literature" }],
         "bookTypeFilters": { "default": "books", "options": [{ "id": "books", "label": "Books (hide audiobooks)" }, { "id": "ebook", "label": "Ebooks" }, { "id": "manga", "label": "Manga / comics" }, { "id": "light-novel", "label": "Light novels (labelled)" }, { "id": "audiobook", "label": "Audiobooks" }, { "id": "all", "label": "All types" }] }

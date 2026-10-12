@@ -10,7 +10,7 @@ extensions/nyaa.js          separate release discovery, optional TorBox handled 
 test/run.js                 runs an extension in Node, the way DSReader would
 ```
 
-Install **RanobeDB** and **Nyaa** separately from this repository in DSReader's Extensions screen. RanobeDB appears alongside other book sources. Browse volumes or series, choose a volume, then **Find downloads**. Nyaa appears as a download source and remains usable for standalone searches. Configure your personal TorBox key and optional RSS relay in the app's **Sources** screen; neither script receives either secret.
+Install **RanobeDB** and **Nyaa** separately from this repository in DSReader's Extensions screen. RanobeDB appears alongside other book sources. Browse volumes or series, choose a volume, then **Find downloads**. Nyaa appears as a download source and remains usable for standalone searches. Configure your personal TorBox key and optional RSS relay in **Settings → Download services** (the optional search relay remains in Sources); neither script receives either secret.
 
 The former bundled Nyaa toggle is replaced by the installable DSReader module. Install Nyaa from the refreshed repository once after updating the app. Existing TorBox settings and download records are retained; the Nyaa screen also displays earlier Nyaa jobs.
 
@@ -21,3 +21,5 @@ Metadata attribution: [RanobeDB](https://ranobedb.org/), [Open Database License]
 Tests: `npm test` runs deterministic catalogue/RSS tests, including the actual DSReader WebView runtime protocol. `npm run test:live -- ranobedb "search words"` checks the public catalogue; `npm run test:live -- nyaa "public domain"` checks RSS availability without submitting torrents. Live Nyaa requests still depend on a reachable direct connection or configured relay; catalogue browsing does not fix an upstream block.
 
 Serve this folder from your extension repository host, refresh the repository in the app, and install the two modules. Local changes are not visible at the existing GitHub repository URL until published.
+
+Nyaa 2.1 declares RanobeDB as an optional cover provider. Install both from the same repository and update Nyaa after refreshing. Search uses compact book rows with collapsed filters; tap a result for the torrent details and download action. Cover matching uses normalized exact title/volume identities, skips ambiguous and batch releases, and never overwrites book metadata. Lookup failures leave the search usable.
