@@ -7,16 +7,27 @@
 //
 // See the format reference: docs/extensions.md in the DSReader app.
 
-const { fetchJson, absolute } = require('dsreader');
+const { fetch, fetchJson, absolute } = require('dsreader');
 const cheerio = require('cheerio');
 
 const SITE = 'https://en.wikisource.org';
 const API = `${SITE}/w/api.php`;
 
-/** MediaWiki API call (anonymous, CORS-free since DSReader makes the request). */
-function api(params) {
-  const query = new URLSearchParams({ format: 'json', formatversion: '2', ...params });
-  return fetchJson(`${API}?${query}`);
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * MediaWiki API call (anonymous, CORS-free since DSReader makes the request). Wikimedia limits
+ * bursts (putting a long book together is one), so a "too many requests" is waited out and retried.
+ */
+async function api(params) {
+  const url = `${API}?${new URLSearchParams({ format: 'json', formatversion: '2', ...params })}`;
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url);
+    if (res.ok) return res.json();
+    if (res.status !== 429 || attempt >= 4) throw new Error(`Wikisource answered ${res.status}`);
+    const after = Number(res.headers.get('retry-after'));
+    await wait(after > 0 ? Math.min(after, 30) * 1000 : 2000 * 2 ** attempt);
+  }
 }
 
 /** A page's rendered HTML, as cheerio. */
@@ -47,11 +58,55 @@ function subpages($, title) {
   return out.filter((p) => !out.some((q) => q.id.startsWith(`${p.id}/`)));
 }
 
+const COMMONS = 'https://commons.wikimedia.org/wiki/Special:FilePath/';
+const coverOf = (file) => `${COMMONS}${encodeURIComponent(file)}?width=400`;
+
+/** Thumbnails Wikisource itself has for pages (often a scanned title page), by title. */
+async function pageImages(titles) {
+  if (!titles.length) return {};
+  const res = await api({ action: 'query', prop: 'pageimages', piprop: 'thumbnail', pithumbsize: '400', titles: titles.slice(0, 50).join('|') });
+  return Object.fromEntries(res.query.pages.filter((p) => p.thumbnail).map((p) => [p.title, p.thumbnail.source]));
+}
+
+/** Books with whatever covers Wikisource has for them (one request for the whole list). */
+async function withCovers(books) {
+  try {
+    const covers = await pageImages(books.map((b) => b.id));
+    return books.map((b) => (covers[b.id] ? { ...b, cover: covers[b.id] } : b));
+  } catch {
+    return books;
+  }
+}
+
+/** Wikidata items' claims, by id. */
+async function wikidata(ids) {
+  const res = await fetchJson(`https://www.wikidata.org/w/api.php?format=json&action=wbgetentities&props=claims|labels&languages=en&ids=${ids.join('|')}`);
+  return res.entities || {};
+}
+const claim = (item, prop) => item && item.claims && item.claims[prop] && item.claims[prop][0].mainsnak.datavalue && item.claims[prop][0].mainsnak.datavalue.value;
+
+/**
+ * A cover and author from Wikidata: the edition's picture or its scan's first page, else the
+ * original work's picture; its author, else the work's. Either may be missing.
+ */
+async function fromWikidata(title) {
+  const props = await api({ action: 'query', prop: 'pageprops', ppprop: 'wikibase_item', titles: title, redirects: '1' });
+  const id = props.query.pages[0] && props.query.pages[0].pageprops && props.query.pages[0].pageprops.wikibase_item;
+  if (!id) return {};
+  const edition = (await wikidata([id]))[id];
+  const workId = claim(edition, 'P629') && claim(edition, 'P629').id;
+  const work = workId ? (await wikidata([workId]))[workId] : undefined;
+  const image = claim(edition, 'P18') || claim(edition, 'P996') || claim(work, 'P18');
+  const authorId = (claim(edition, 'P50') || claim(work, 'P50') || {}).id;
+  const author = authorId ? (await wikidata([authorId]))[authorId] : undefined;
+  return { cover: image ? coverOf(image) : undefined, author: author && author.labels && author.labels.en && author.labels.en.value };
+}
+
 /** Category members (works only) as books. */
 async function category(name, cont) {
   const res = await api({ action: 'query', list: 'categorymembers', cmtitle: `Category:${name}`, cmnamespace: '0', cmlimit: '50', ...(cont ? { cmcontinue: cont } : {}) });
   return {
-    books: res.query.categorymembers.filter((m) => !m.title.includes('/')).map((m) => ({ id: m.title, title: m.title })),
+    books: await withCovers(res.query.categorymembers.filter((m) => !m.title.includes('/')).map((m) => ({ id: m.title, title: m.title }))),
     next: res.continue ? JSON.stringify({ category: name, cont: res.continue.cmcontinue }) : undefined,
   };
 }
@@ -80,18 +135,19 @@ module.exports = {
     const res = await api({ action: 'query', list: 'search', srsearch: text, srnamespace: '0', srlimit: '30' });
     // Search finds chapters too; list each work once, by its main page.
     const titles = [...new Set(res.query.search.map((r) => r.title.split('/')[0]))];
-    return { books: titles.map((t) => ({ id: t, title: t })) };
+    return { books: await withCovers(titles.map((t) => ({ id: t, title: t }))) };
   },
 
   /** One book: what it is, and how to get all of it. */
   async details(id) {
-    const $ = await page(id);
-    const author = $('.wst-header-author a, #header_author_text a').first().text().trim() || undefined;
+    const [$, images, data] = await Promise.all([page(id), pageImages([id]).catch(() => ({})), fromWikidata(id).catch(() => ({}))]);
+    const author = $('.wst-header-author a, #header_author_text a').first().text().trim() || data.author;
     const notes = $('.wst-header-notes, #header_notes').first().text().trim() || undefined;
     const contents = subpages($, id);
     return {
       title: id,
       author,
+      cover: images[id] || data.cover,
       description: notes,
       language: 'en',
       webUrl: `${SITE}/wiki/${encodeURIComponent(id.replace(/ /g, '_'))}`,

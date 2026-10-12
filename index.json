@@ -7,7 +7,7 @@
       "id": "wikisource-en",
       "name": "Wikisource",
       "description": "Public-domain books from English Wikisource",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "kind": "book",
       "lang": "en",
       "site": "https://en.wikisource.org",

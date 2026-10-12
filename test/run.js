@@ -20,6 +20,9 @@ for (const field of ['id', 'name', 'version', 'script']) if (!meta[field]) throw
 
 // What require('dsreader') gives inside the app (see the runtime's dsrLib).
 const db = {};
+// Like the app, send a browser's user agent (some sites, e.g. Wikimedia, throttle requests without one).
+const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+const fetch = (url, init = {}) => globalThis.fetch(url, { ...init, headers: { 'User-Agent': UA, ...init.headers } });
 async function ok(url, init) {
   const res = await fetch(url, init);
   if (!res.ok) throw new Error(`The site answered ${res.status} for ${url}`);
