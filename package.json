@@ -3,7 +3,8 @@
   "private": true,
   "description": "A DSReader extension repository",
   "scripts": {
-    "test": "node test/run.js"
+    "test": "node --test test/*.test.cjs",
+    "test:live": "node test/run.js"
   },
   "devDependencies": {
     "cheerio": "1.0.0-rc.12"

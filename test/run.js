@@ -41,6 +41,7 @@ const dsreader = {
     }
   },
   storage: { get: (k) => db[k]?.value, set: (k, value) => (db[k] = { value }), delete: (k) => delete db[k], getAllKeys: () => Object.keys(db) },
+  fetchReleaseFeed: async url => (await ok(url, { redirect: 'error' })).text(),
 };
 const libs = { dsreader, cheerio };
 const req = (name) => {
@@ -55,6 +56,12 @@ const show = (label, value) => console.log(`\n== ${label}\n${JSON.stringify(valu
   const module = { exports: {} };
   new Function('require', 'module', 'exports', 'console', code)(req, module, module.exports, console);
   const ext = module.exports.default || module.exports;
+  if (meta.role === 'releases') {
+    const result = await ext.releaseSearch({ text: process.argv[3] || 'public domain', category: '3_1', connection: 'direct' });
+    show('releaseSearch()', { count: result.releases.length, releases: result.releases.slice(0, 3) });
+    if (result.releases[0]?.infoHash) show('downloadInfo()', await ext.downloadInfo(result.releases[0]));
+    return;
+  }
   for (const fn of ['browse', 'details']) if (typeof ext[fn] !== 'function') throw new Error(`The extension must export ${fn}()`);
   console.log(`Loaded ${meta.name} ${meta.version}`);
 
@@ -74,7 +81,7 @@ const show = (label, value) => console.log(`\n== ${label}\n${JSON.stringify(valu
 
   const details = await ext.details(books[0].id);
   show(`details("${books[0].id}")`, { ...details, contents: details.contents?.slice(0, 5), sections: details.contents?.length });
-  if (!details.files?.length && !details.contents?.length) throw new Error('details() needs files or contents');
+  if (!details.files?.length && !details.contents?.length && !details.downloadSearch) throw new Error('details() needs files, contents or downloadSearch');
 
   for (const part of (details.contents ?? []).slice(0, 2)) {
     if (!ext.section) throw new Error('The book has contents, so the extension must export section()');
