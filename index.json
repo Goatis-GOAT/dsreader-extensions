@@ -1,0 +1,18 @@
+{
+  "dsreader": 1,
+  "name": "My DSReader Extensions",
+  "description": "Public-domain books",
+  "extensions": [
+    {
+      "id": "wikisource-en",
+      "name": "Wikisource",
+      "description": "Public-domain books from English Wikisource",
+      "version": "1.0.0",
+      "kind": "book",
+      "lang": "en",
+      "site": "https://en.wikisource.org",
+      "script": "extensions/wikisource.js",
+      "contentRating": "SAFE"
+    }
+  ]
+}
