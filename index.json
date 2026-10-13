@@ -91,7 +91,7 @@
     {
       "id": "zlibrary",
       "name": "Z-Library",
-      "version": "1.0.1",
+      "version": "1.0.3",
       "role": "catalogue",
       "kind": "book",
       "script": "extensions/zlibrary.js",

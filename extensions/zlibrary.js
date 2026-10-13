@@ -7,6 +7,7 @@ let chosen, discovering;
 const bookCache = new Map();
 const supported = ['epub', 'pdf'];
 const unavailable = new Map();
+const checkErrors = new Map();
 function origin(value) {
   try {
     const u = new URL(value.includes('://') ? value : 'https://' + value);
@@ -16,16 +17,22 @@ function origin(value) {
 function saved() { const s = storage.get(STATE); return s && typeof s === 'object' ? s : {}; }
 async function check(base) {
   try {
-    const r = await fetch(base + '/eapi/info/ok', { timeout: 7000, credentials: 'omit' });
+    const r = await fetch(base + '/eapi/info/ok', { timeout: 7000 });
+    if (!r.ok) { checkErrors.set(base, { message: 'HTTP ' + r.status }); return false; }
     const data = r.ok && await r.json();
+    if (!data || data.success !== 1) checkErrors.set(base, { message: 'Invalid health response' });
     return data && data.success === 1;
-  } catch { return false; }
+  } catch (error) {
+    checkErrors.set(base, error?.type === 'cloudflareError' ? error : { message: 'Connection or health response failed' });
+    return false;
+  }
 }
 async function discover() {
   if (chosen) return chosen;
   if (discovering) return discovering;
   discovering = (async () => {
     const s = saved();
+    checkErrors.clear();
     const candidates = [...new Set([s.last, ...(Array.isArray(s.domains) ? s.domains.slice(0, 24) : []), ...SEEDS].filter(Boolean).map(origin).filter(Boolean))]
       .filter(base => (unavailable.get(base) || 0) < Date.now());
     let base;
@@ -35,7 +42,13 @@ async function discover() {
       const results = await Promise.all(group.map(check));
       base = group[results.indexOf(true)];
     }
-    if (!base) throw new Error('No Z-Library domain is reachable. Try another network or DNS provider.');
+    if (!base) {
+      const challenge = [...checkErrors.values()].find(error => error?.type === 'cloudflareError');
+      if (challenge) throw challenge;
+      if (!candidates.length) throw new Error('Z-Library domains recently returned server errors. Wait five minutes and try again.');
+      const reasons = [...checkErrors.entries()].slice(0, 6).map(([url, error]) => new URL(url).hostname + ': ' + error.message).join('; ');
+      throw new Error('No Z-Library domain passed its connection check. ' + reasons);
+    }
     let domains = candidates;
     let updated = s.updated || 0;
     if (Date.now() - updated > 86400000) {
@@ -73,13 +86,19 @@ async function page(path) {
     catch (error) {
       // A browser check needs user interaction, not more automatic requests.
       if (error?.type === 'cloudflareError' || error?.type === 'authenticationError') throw error;
-      if (attempt === 2) throw new Error('Z-Library could not connect. Try another network or DNS provider.');
+      if (attempt === 2) throw new Error('Z-Library requests failed across three domains. The app could not establish a connection; this does not confirm a DNS problem.');
       unavailable.set(base, Date.now() + 300000); chosen = undefined;
       continue;
     }
     if (![502, 503, 504].includes(response.status)) break;
     unavailable.set(base, Date.now() + 300000); chosen = undefined;
-    if (attempt === 2) throw new Error('Z-Library search is temporarily unavailable across the checked domains. Try again later.');
+    if (attempt === 2) {
+      // Keep this domain for the explicit browser handoff and the matching retry.
+      chosen = base; unavailable.delete(base);
+      const error = new Error('Z-Library returned HTTP ' + response.status + '. Open the requested page in the browser; if it loads, DSReader can read its results.');
+      error.type = 'browserCheckError'; error.url = base + path;
+      throw error;
+    }
   }
   if (response.status === 401 || (response.url && /\/login(?:[/?#]|$)/i.test(response.url))) login(base);
   if (!response.ok) throw new Error('Z-Library could not load this page (' + response.status + ').');
