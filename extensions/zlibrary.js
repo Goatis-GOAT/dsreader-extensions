@@ -27,7 +27,7 @@ async function check(base) {
     return false;
   }
 }
-async function discover() {
+async function discover(path = '/') {
   if (chosen) return chosen;
   if (discovering) return discovering;
   discovering = (async () => {
@@ -44,10 +44,26 @@ async function discover() {
     }
     if (!base) {
       const challenge = [...checkErrors.values()].find(error => error?.type === 'cloudflareError');
-      if (challenge) throw challenge;
+      if (challenge) {
+        // Open the requested content page, not the JSON health endpoint.
+        const checkUrl = challenge.resolutionRequest?.url;
+        const checkedBase = checkUrl && origin(new URL(checkUrl).origin);
+        if (checkedBase && candidates.includes(checkedBase)) {
+          chosen = checkedBase;
+          challenge.resolutionRequest = { ...challenge.resolutionRequest, url: checkedBase + path };
+        }
+        throw challenge;
+      }
       if (!candidates.length) throw new Error('Z-Library domains recently returned server errors. Wait five minutes and try again.');
       const reasons = [...checkErrors.entries()].slice(0, 6).map(([url, error]) => new URL(url).hostname + ': ' + error.message).join('; ');
-      throw new Error('No Z-Library domain passed its connection check. ' + reasons);
+      // A failed API health check does not prove the website cannot load in a browser.
+      // Prefer the user's last domain, then the seed already verified in the browser.
+      const fallback = candidates.find(base => base === origin(s.last || ''))
+        || candidates.find(base => base === 'https://z-library.ec') || candidates[0];
+      chosen = fallback;
+      const error = new Error('No Z-Library domain passed its connection check. ' + reasons + '. You can try opening the requested page in the browser.');
+      error.type = 'browserCheckError'; error.url = fallback + path;
+      throw error;
     }
     let domains = candidates;
     let updated = s.updated || 0;
@@ -81,7 +97,7 @@ function localPath(value, base) {
 async function page(path) {
   let base, response;
   for (let attempt = 0; attempt < 3; attempt++) {
-    base = await discover();
+    base = await discover(path);
     try { response = await fetch(base + path, { timeout: 20000 }); }
     catch (error) {
       // A browser check needs user interaction, not more automatic requests.

@@ -77,3 +77,19 @@ test('plain search 503 offers a browser handoff and retries the same domain',asy
  assert.equal((await ext.search({text:'fixture'})).books.length,1);
  assert.equal(requests[before].url,failure.url);
 });
+test('failed health checks offer the actual search page and browser recovery skips the health gate',async()=>{
+ const {ext,requests}=setup(url=>new URL(url).pathname.startsWith('/s/')?response(card):{ok:false,status:503});
+ let error;
+ await assert.rejects(ext.search({text:'Austen'}),e=>{error=e;return e.type==='browserCheckError';});
+ assert.equal(new URL(error.url).hostname,'z-library.ec');
+ assert.equal(new URL(error.url).pathname,'/s/Austen');
+ const before=requests.length;
+ assert.equal((await ext.search({text:'Austen'})).books.length,1);
+ assert.equal(requests[before].url,error.url);
+ assert.equal(requests.length,before+1);
+});
+test('health endpoint challenges open content instead of an unreadable JSON browser page',async()=>{
+ const challenge=Object.assign(new Error('Browser check'),{type:'cloudflareError',resolutionRequest:{url:'https://z-library.ec/eapi/info/ok'}});
+ const {ext}=setup(()=>{throw challenge;});
+ await assert.rejects(ext.search({text:'Austen'}),e=>e===challenge&&new URL(e.resolutionRequest.url).pathname==='/s/Austen');
+});
