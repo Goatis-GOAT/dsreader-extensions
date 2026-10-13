@@ -6,6 +6,7 @@ const STATE = 'zlibrary.domains.v1';
 let chosen, discovering;
 const bookCache = new Map();
 const supported = ['epub', 'pdf'];
+const unavailable = new Map();
 function origin(value) {
   try {
     const u = new URL(value.includes('://') ? value : 'https://' + value);
@@ -25,7 +26,8 @@ async function discover() {
   if (discovering) return discovering;
   discovering = (async () => {
     const s = saved();
-    const candidates = [...new Set([s.last, ...(Array.isArray(s.domains) ? s.domains.slice(0, 24) : []), ...SEEDS].filter(Boolean).map(origin).filter(Boolean))];
+    const candidates = [...new Set([s.last, ...(Array.isArray(s.domains) ? s.domains.slice(0, 24) : []), ...SEEDS].filter(Boolean).map(origin).filter(Boolean))]
+      .filter(base => (unavailable.get(base) || 0) < Date.now());
     let base;
     if (candidates[0] && await check(candidates[0])) base = candidates[0];
     for (let i = 1; !base && i < candidates.length; i += 3) {
@@ -64,13 +66,20 @@ function localPath(value, base) {
   try { const u = new URL(value, base); return u.origin === base && !u.username && !u.password ? u.pathname : undefined; } catch { return undefined; }
 }
 async function page(path) {
-  let base = await discover();
-  let response;
-  try { response = await fetch(base + path, { timeout: 20000 }); }
-  catch {
-    chosen = undefined;
+  let base, response;
+  for (let attempt = 0; attempt < 3; attempt++) {
     base = await discover();
-    response = await fetch(base + path, { timeout: 20000 });
+    try { response = await fetch(base + path, { timeout: 20000 }); }
+    catch (error) {
+      // A browser check needs user interaction, not more automatic requests.
+      if (error?.type === 'cloudflareError' || error?.type === 'authenticationError') throw error;
+      if (attempt === 2) throw new Error('Z-Library could not connect. Try another network or DNS provider.');
+      unavailable.set(base, Date.now() + 300000); chosen = undefined;
+      continue;
+    }
+    if (![502, 503, 504].includes(response.status)) break;
+    unavailable.set(base, Date.now() + 300000); chosen = undefined;
+    if (attempt === 2) throw new Error('Z-Library search is temporarily unavailable across the checked domains. Try again later.');
   }
   if (response.status === 401 || (response.url && /\/login(?:[/?#]|$)/i.test(response.url))) login(base);
   if (!response.ok) throw new Error('Z-Library could not load this page (' + response.status + ').');
