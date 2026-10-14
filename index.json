@@ -91,13 +91,13 @@
     {
       "id": "zlibrary",
       "name": "Z-Library",
-      "version": "1.0.5",
+      "version": "1.0.8",
       "role": "catalogue",
       "kind": "book",
       "script": "extensions/zlibrary.js",
       "contentRating": "MATURE",
       "description": "General books with automatic domain discovery. Sign in with your own account; downloads use your account allowance.",
-      "site": "https://z-library.sk"
+      "site": "https://en.z-lib.bz"
     }
   ]
 }

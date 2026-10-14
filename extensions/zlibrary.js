@@ -1,9 +1,18 @@
 // DSReader catalogue source. Never request /dl/ until the app's explicit download action.
 const { fetch, storage, absolute } = require('dsreader');
 const { load } = require('cheerio');
-const SEEDS = ['z-library.sk', 'z-library.ec', 'z-lib.gd', 'z-lib.gl', 'z-library.hn', 'z-library.la'];
-const STATE = 'zlibrary.domains.v1';
+// Desktop 2.4.3's bundled/saved public book domains, plus its observed active address.
+// Article-only endpoints and .onion addresses are not book-source HTTPS fallbacks.
+const SEEDS = ['en.z-lib.bz', 'z-lib.sk', 'z-library.im', 'z-library.sk', 'z-lib.fm',
+  'z-lib.gd', 'z-lib.gl', 'z-lib.bz', 'z-lib.do', 'z-library.hn', 'z-library.la',
+  'italian-books.sk', 'spanish-books.sk', 'thai-books.sk', 'japanese-books.sk',
+  'frenchbooks.sk', 'german-books.sk', 'portuguese-books.sk', 'z-lib.fo',
+  'urdu-books.sk', 'z-library.ec', 'czechbooks.sk', 'librella.fi', 'librella.tw',
+  'lexlib.fi', 'lexlib.tw', 'bookabooki.fi', 'bookabooki.tw', '1lib.sk', 'z-lib.sx', 'z-library.gs'];
+// Refresh older installations from the desktop pool instead of retaining the former seed order.
+const STATE = 'zlibrary.domains.desktop.v2';
 let chosen, discovering;
+let homepage;
 const bookCache = new Map();
 const supported = ['epub', 'pdf'];
 const unavailable = new Map();
@@ -11,7 +20,7 @@ const checkErrors = new Map();
 function origin(value) {
   try {
     const u = new URL(value.includes('://') ? value : 'https://' + value);
-    return u.protocol === 'https:' && !u.username && !u.password && !u.port && u.pathname === '/' && !u.search && !u.hash && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(u.hostname) ? u.origin : undefined;
+    return u.protocol === 'https:' && !u.username && !u.password && !u.port && u.pathname === '/' && !u.search && !u.hash && !/\.onion$/i.test(u.hostname) && !/^articles?(?:\.|[0-9])/i.test(u.hostname) && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(u.hostname) ? u.origin : undefined;
   } catch { return undefined; }
 }
 function saved() { const s = storage.get(STATE); return s && typeof s === 'object' ? s : {}; }
@@ -33,7 +42,7 @@ async function discover(path = '/') {
   discovering = (async () => {
     const s = saved();
     checkErrors.clear();
-    const candidates = [...new Set([s.last, ...(Array.isArray(s.domains) ? s.domains.slice(0, 24) : []), ...SEEDS].filter(Boolean).map(origin).filter(Boolean))]
+    const candidates = [...new Set([s.last, ...(Array.isArray(s.domains) ? s.domains.slice(0, 48) : []), ...SEEDS].filter(Boolean).map(origin).filter(Boolean))]
       .filter(base => (unavailable.get(base) || 0) < Date.now());
     let base;
     if (candidates[0] && await check(candidates[0])) base = candidates[0];
@@ -58,7 +67,7 @@ async function discover(path = '/') {
       // A failed API health check does not prove the website cannot load in a browser.
       // Prefer the user's last domain, then the seed already verified in the browser.
       const fallback = candidates.find(base => base === origin(s.last || ''))
-        || candidates.find(base => base === 'https://z-library.ec') || candidates[0];
+        || candidates.find(base => base === 'https://en.z-lib.bz') || candidates[0];
       chosen = fallback;
       // Try the content page; the app can inspect it using its browser connection.
       // API failure alone must never claim a warning or verification is required.
@@ -68,10 +77,10 @@ async function discover(path = '/') {
     let updated = s.updated || 0;
     if (Date.now() - updated > 86400000) {
       try {
-        const r = await fetch(base + '/eapi/info/domains', { timeout: 7000, credentials: 'omit' });
+        const r = await fetch(base + '/eapi/info/domains/singlelogin', { timeout: 7000, credentials: 'omit' });
         const data = r.ok && await r.json();
-        if (Array.isArray(data?.domains)) {
-          domains = [...new Set([...candidates, ...data.domains.map(row => typeof row?.domain === 'string' ? origin(row.domain) : undefined).filter(Boolean)])].slice(0, 32);
+        if (data?.success === 1 && Array.isArray(data.domains)) {
+          domains = [...new Set([...data.domains.map(row => typeof row?.domain === 'string' ? origin(row.domain) : undefined).filter(Boolean), ...candidates])].slice(0, 48);
           updated = Date.now();
         }
       } catch { /* A known working domain remains usable when list refresh fails. */ }
@@ -138,10 +147,42 @@ function listing($, base, query) {
     books.push(book); bookCache.set(href, book);
     if (bookCache.size > 150) bookCache.delete(bookCache.keys().next().value);
   });
+  // Homepage recommendations are image links in z-masonry, not search's z-bookcard elements.
+  if (!books.length) $('z-masonry a[href], .books-mosaic a[href]').each((_, node) => {
+    const el = $(node), href = localPath(el.attr('href'), base), img = el.find('img').first();
+    const label = (img.attr('alt') || el.attr('title') || '').trim();
+    if (!label || !/^\/book\/[a-z0-9]+\/[^?#]+\.html$/i.test(href || '') || seen.has(href)) return;
+    const split = label.indexOf(' — ');
+    const book = { id: href, title: split < 0 ? label : label.slice(split + 3).trim(), author: split < 0 ? undefined : label.slice(0, split).trim(), cover: cover($, el, base) };
+    if (!book.title) return;
+    seen.add(href); books.push(book); bookCache.set(href, book);
+    if (bookCache.size > 150) bookCache.delete(bookCache.keys().next().value);
+  });
   const next = $('a[href]').toArray().map(n => $(n).attr('href')).find(h => {
     try { const u = new URL(h, base); return u.origin === base && (u.pathname.startsWith('/s/') || h.startsWith('?')) && Number(u.searchParams.get('page')) === query.page + 1; } catch { return false; }
   });
   return { books, next: next ? JSON.stringify({ ...query, page: query.page + 1 }) : undefined };
+}
+async function home() {
+  // Share concurrent homepage requests without retaining a stale signed-in page.
+  if (!homepage) homepage = page('/').finally(() => { homepage = undefined; });
+  return homepage;
+}
+async function accountStatus() {
+  try {
+    const { $, base } = await page('/profile');
+    const tile = $('.caret-scroll__tile').filter((_, node) => /^daily limit$/i.test($(node).find('.caret-scroll__desc').text().trim())).first();
+    const ratio = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(tile.find('.caret-scroll__title').text());
+    if (ratio) {
+      const used = Number(ratio[1]), limit = Number(ratio[2]);
+      if (Number.isSafeInteger(used) && Number.isSafeInteger(limit))
+        return { provider: 'zlibrary', signedIn: true, used, limit, remaining: Math.max(0, limit - used), signInUrl: base + '/login' };
+    }
+    return { provider: 'zlibrary', signedIn: $('#loginForm, .auth_modal_login, a[href="/login"]').length ? false : undefined, signInUrl: base + '/login' };
+  } catch (error) {
+    if (error?.type === 'authenticationError') return { provider: 'zlibrary', signedIn: false, signInUrl: error.url };
+    throw error;
+  }
 }
 async function search(query) {
   const format = query.filters?.format?.[0] || query.format || 'epub';
@@ -176,14 +217,15 @@ async function details(id) {
   };
 }
 module.exports = {
-  site: 'https://z-library.sk',
-  featured: () => [{ title: 'Popular books', path: 'popular' }],
+  site: 'https://en.z-lib.bz',
+  featured: () => [{ title: 'Featured books', path: 'popular' }],
   async browse(path) {
     if (path && path !== 'popular') return search(JSON.parse(path));
-    const { $, base } = await page('/');
+    const { $, base } = await home();
     return listing($, base, { text: '', format: 'epub', page: 1 });
   },
   search,
+  accountStatus,
   searchOptions: () => ({ sorts: [], filters: [{ id: 'format', title: 'File type', multiple: false, options: [{ id: 'epub', label: 'EPUB' }, { id: 'pdf', label: 'PDF' }] }] }),
   details,
   async resolveFile(id, format) {
