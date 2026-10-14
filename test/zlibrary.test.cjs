@@ -120,3 +120,11 @@ test('desktop pool prefers its active host and refreshes through singlelogin wit
  assert.ok(cached.domains.includes('https://z-library.im'));
  assert.doesNotMatch(JSON.stringify(cached),/onion|articles\.sk|bad\.example|secret/);
 });
+test('account allowance uses the app-provided saved server directly instead of probing the domain pool',async()=>{
+ const quota='<div class="caret-scroll__tile"><div class="caret-scroll__title">2/15</div><div class="caret-scroll__desc">Daily limit</div></div>';
+ const {ext,requests}=setup(url=>{assert.equal(url,'https://en.z-lib.bz/profile');return response(quota);});
+ const status=await ext.accountStatus({origin:'https://en.z-lib.bz'});assert.equal(status.remaining,13);assert.equal(requests.length,1);
+ const failing=setup(()=>({status:503,ok:false}));
+ await assert.rejects(failing.ext.accountStatus({origin:'https://en.z-lib.bz'}),/temporarily unavailable/);
+ assert.equal(failing.requests.length,1);
+});

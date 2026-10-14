@@ -102,19 +102,21 @@ function safePath(value) {
 function localPath(value, base) {
   try { const u = new URL(value, base); return u.origin === base && !u.username && !u.password ? u.pathname : undefined; } catch { return undefined; }
 }
-async function page(path) {
+async function page(path, preferredBase) {
   let base, response;
   for (let attempt = 0; attempt < 3; attempt++) {
-    base = await discover(path);
+    base = preferredBase || await discover(path);
     try { response = await fetch(base + path, { timeout: 20000 }); }
     catch (error) {
       // A browser check needs user interaction, not more automatic requests.
       if (error?.type === 'cloudflareError' || error?.type === 'authenticationError') throw error;
+      if (preferredBase) throw new Error('The account server could not be reached. Your saved account is not removed.');
       if (attempt === 2) throw new Error('Z-Library requests failed across three domains. The app could not establish a connection; this does not confirm a DNS problem.');
       unavailable.set(base, Date.now() + 300000); chosen = undefined;
       continue;
     }
     if (![502, 503, 504].includes(response.status)) break;
+    if (preferredBase) throw new Error('The account server returned HTTP ' + response.status + '. Your download allowance is temporarily unavailable.');
     unavailable.set(base, Date.now() + 300000); chosen = undefined;
     if (attempt === 2) {
       // Keep this domain for the explicit browser handoff and the matching retry.
@@ -168,9 +170,11 @@ async function home() {
   if (!homepage) homepage = page('/').finally(() => { homepage = undefined; });
   return homepage;
 }
-async function accountStatus() {
+async function accountStatus(options = {}) {
   try {
-    const { $, base } = await page('/profile');
+    const preferred = typeof options.origin === 'string' ? origin(options.origin) : undefined;
+    const known = preferred && SEEDS.includes(new URL(preferred).hostname) ? preferred : undefined;
+    const { $, base } = await page('/profile', known);
     const tile = $('.caret-scroll__tile').filter((_, node) => /^daily limit$/i.test($(node).find('.caret-scroll__desc').text().trim())).first();
     const ratio = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(tile.find('.caret-scroll__title').text());
     if (ratio) {
