@@ -55,15 +55,14 @@ async function discover(path = '/') {
         throw challenge;
       }
       if (!candidates.length) throw new Error('Z-Library domains recently returned server errors. Wait five minutes and try again.');
-      const reasons = [...checkErrors.entries()].slice(0, 6).map(([url, error]) => new URL(url).hostname + ': ' + error.message).join('; ');
       // A failed API health check does not prove the website cannot load in a browser.
       // Prefer the user's last domain, then the seed already verified in the browser.
       const fallback = candidates.find(base => base === origin(s.last || ''))
         || candidates.find(base => base === 'https://z-library.ec') || candidates[0];
       chosen = fallback;
-      const error = new Error('No Z-Library domain passed its connection check. ' + reasons + '. You can try opening the requested page in the browser.');
-      error.type = 'browserCheckError'; error.url = fallback + path;
-      throw error;
+      // Try the content page; the app can inspect it using its browser connection.
+      // API failure alone must never claim a warning or verification is required.
+      return fallback;
     }
     let domains = candidates;
     let updated = s.updated || 0;
@@ -111,9 +110,7 @@ async function page(path) {
     if (attempt === 2) {
       // Keep this domain for the explicit browser handoff and the matching retry.
       chosen = base; unavailable.delete(base);
-      const error = new Error('Z-Library returned HTTP ' + response.status + '. Open the requested page in the browser; if it loads, DSReader can read its results.');
-      error.type = 'browserCheckError'; error.url = base + path;
-      throw error;
+      throw new Error('Z-Library returned HTTP ' + response.status + ' across the checked domains. Try again later. This is a server error, not a verification request.');
     }
   }
   if (response.status === 401 || (response.url && /\/login(?:[/?#]|$)/i.test(response.url))) login(base);

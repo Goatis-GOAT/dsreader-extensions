@@ -16,7 +16,7 @@ test('missing login yields a browser sign-in action and invalid book paths never
  const before=requests.length;await assert.rejects(ext.details('https://evil.example/'),/Invalid/);assert.equal(requests.length,before);
 });
 test('unreachable domains fail gracefully and unavailable formats do not produce a download',async()=>{
- const {ext}=setup(()=>{throw Error('offline');});await assert.rejects(ext.search({text:'fixture'}),/No Z-Library domain/);
+ const {ext}=setup(()=>{throw Error('offline');});await assert.rejects(ext.search({text:'fixture'}),e=>/could not establish a connection/.test(e.message)&&!e.type);
  const online=setup(url=>response(url.endsWith('/ok')?{success:1}:url.endsWith('/domains')?{domains:[]}:detail.replace('EPUB','MOBI'))).ext;
  await assert.rejects(online.details('/book/abc123/fixture.html'),/not an EPUB or PDF/);
 });
@@ -62,7 +62,7 @@ test('HTTP failures in discovery are distinguished from DNS failures',async()=>{
  const {ext}=setup(()=>({ok:false,status:503}));
  await assert.rejects(ext.search({text:'fixture'}),e=>/HTTP 503/.test(e.message)&&!e.message.includes('DNS provider'));
 });
-test('plain search 503 offers a browser handoff and retries the same domain',async()=>{
+test('plain search 503 never claims verification is required',async()=>{
  let recovered=false;
  const {ext,requests}=setup(url=>{
   if(url.endsWith('/ok'))return response({success:1});
@@ -70,22 +70,22 @@ test('plain search 503 offers a browser handoff and retries the same domain',asy
   return recovered?response(card):{ok:false,status:503};
  });
  let failure;
- await assert.rejects(ext.search({text:'fixture'}),e=>{failure=e;return e.type==='browserCheckError'&&e.url.includes('/s/fixture?');});
+ await assert.rejects(ext.search({text:'fixture'}),e=>{failure=e;return !e.type;});
  assert.match(failure.message,/HTTP 503/);
  recovered=true;
  const before=requests.length;
  assert.equal((await ext.search({text:'fixture'})).books.length,1);
- assert.equal(requests[before].url,failure.url);
+ assert.equal(requests[before].url,requests[before-1].url);
 });
-test('failed health checks offer the actual search page and browser recovery skips the health gate',async()=>{
+test('failed health checks do not block a working content page or ask for verification',async()=>{
  const {ext,requests}=setup(url=>new URL(url).pathname.startsWith('/s/')?response(card):{ok:false,status:503});
- let error;
- await assert.rejects(ext.search({text:'Austen'}),e=>{error=e;return e.type==='browserCheckError';});
- assert.equal(new URL(error.url).hostname,'z-library.ec');
- assert.equal(new URL(error.url).pathname,'/s/Austen');
+ assert.equal((await ext.search({text:'Austen'})).books.length,1);
+ const address=requests.at(-1).url;
+ assert.equal(new URL(address).hostname,'z-library.ec');
+ assert.equal(new URL(address).pathname,'/s/Austen');
  const before=requests.length;
  assert.equal((await ext.search({text:'Austen'})).books.length,1);
- assert.equal(requests[before].url,error.url);
+ assert.equal(requests[before].url,address);
  assert.equal(requests.length,before+1);
 });
 test('health endpoint challenges open content instead of an unreadable JSON browser page',async()=>{
