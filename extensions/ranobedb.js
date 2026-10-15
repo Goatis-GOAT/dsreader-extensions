@@ -32,6 +32,16 @@ const validId = id => {
 };
 const cover = image => image && !image.nsfw && !image.spoiler && /^[\w.-]+$/.test(image.filename) ? 'https://images.ranobedb.org/' + image.filename : undefined;
 const book = b => ({ id: validId(b.id), title: b.title, cover: cover(b.image) });
+function coverTitles(b) {
+  const titles = [b.title, b.romaji, b.title_orig, b.romaji_orig].filter(Boolean);
+  // Multipart novels often include both series and part subtitles in official titles.
+  // Offer a shorthand while preserving BOTH part and volume numbers.
+  const aliases = titles.flatMap(title => {
+    const match = /^(.*?)\bPart\s+(\d+)\b.*?\b(?:Volume|Vol\.?)\s+(\d+(?:\.\d+)?)\b/i.exec(title);
+    return match ? [match[1].split(':')[0].trim() + ' Part ' + match[2] + ' Volume ' + match[3]] : [];
+  });
+  return [...new Set([...titles, ...aliases])];
+}
 const pathOf = state => JSON.stringify(state);
 function params(state) {
   const p = new URLSearchParams({ page: String(state.page || 1), limit: '24', sort: state.sort || 'Release date desc', rf: 'digital', rfl: 'or' });
@@ -60,6 +70,17 @@ async function listing(state) {
 }
 module.exports = {
   site: SITE,
+  async coverSearch({ text, language }) {
+    // Cover discovery is independent of downloadable/digital edition availability.
+    // A single larger page covers long series without a request for each volume.
+    const p = new URLSearchParams({ q: String(text || '').slice(0, 300), limit: '100', page: '1', sort: 'Relevance desc' });
+    if (language !== 'all') { p.set('rl', language || 'en'); p.set('rll', 'or'); }
+    const data = await api('/books?' + p);
+    if (!Array.isArray(data.books)) throw new Error('RanobeDB returned invalid cover metadata.');
+    return { images: data.books.filter(b => !b.hidden && cover(b.image)).flatMap(b =>
+      coverTitles(b)
+        .map(title => ({ ...book(b), title }))) };
+  },
   featured: () => [{ title: 'Latest English digital volumes', path: pathOf({ language: 'en' }) }],
   async browse(path) {
     if (!path) return { title: 'RanobeDB', folders: [

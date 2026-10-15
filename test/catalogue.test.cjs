@@ -40,6 +40,41 @@ test('catalogue details delegate downloads and retain book metadata without manu
   assert.match(result.attribution, /RanobeDB/);
   await assert.rejects(() => extension.details('../oops'), /Invalid/);
 });
+test('RanobeDB image-library method returns book covers without downloadable content', async () => {
+  const extension = load('ranobedb', { storage: db(), fetchJson: async () => ({ books: [originalBook], currentPage: 1, totalPages: 1 }) });
+  const result = await extension.coverSearch({ text: 'Original', language: 'en' });
+  assert.equal(result.images.length, 1);
+  assert.equal(result.images[0].cover, 'https://images.ranobedb.org/fixture.jpg');
+  assert.equal(result.images[0].files, undefined);
+});
+
+test('cover search requests long series without digital-only filtering and exposes safe title aliases', async () => {
+  const urls = [];
+  const extension = load('ranobedb', { storage: db(), fetchJson: async url => {
+    urls.push(url);
+    return { books: [{ ...originalBook, romaji: 'Alternate title Vol. 1', title_orig: '元のタイトル 1' },
+      { ...originalBook, id: 13, image: { filename: 'spoiler.jpg', spoiler: true } } ] };
+  } });
+  const result = await extension.coverSearch({ text: 'Original', language: 'en' });
+  const params = new URL(urls[0]).searchParams;
+  assert.equal(params.get('limit'), '100');
+  assert.equal(params.has('rf'), false);
+  assert.equal(params.get('rl'), 'en');
+  assert.deepEqual(result.images.map(i => i.title), [originalBook.title, 'Alternate title Vol. 1', '元のタイトル 1']);
+  assert.ok(result.images.every(i => i.id === '12'));
+  await extension.coverSearch({ text: 'Original', language: 'en' });
+  assert.equal(urls.length, 1);
+});
+test('multipart cover aliases retain part and volume while omitting long subtitles', async () => {
+  const extension = load('ranobedb', { storage: db(), fetchJson: async () => ({ books: [
+    { ...originalBook, title: 'A Bookworm: Becoming a Librarian! Part 2: Shrine Maiden Volume 1' },
+  ] }) });
+  const result = await extension.coverSearch({ text: 'A Bookworm', language: 'en' });
+  assert.deepEqual(result.images.map(b => b.title), [
+    'A Bookworm: Becoming a Librarian! Part 2: Shrine Maiden Volume 1', 'A Bookworm Part 2 Volume 1',
+  ]);
+});
+
 test('series use edition language and explicit order; empty and network failure stay distinct', async () => {
   const extension = load('ranobedb', { storage: db(), fetchJson: async () => ({ series: { title: 'Fixture', books: [{ ...originalBook, id: 3, sort_order: 2 }, { ...originalBook, id: 1, sort_order: 1 }, { ...originalBook, id: 4, lang: 'ja', sort_order: 0 }] } }) });
   const result = await extension.browse(JSON.stringify({ series: 2, language: 'en' }));
@@ -104,4 +139,7 @@ test('actual WebView runtime loads release-only DSReader scripts and routes RSS 
   assert.equal(result.releases.length, 1);
   assert.equal(feedCalls, 1);
   assert.equal((await call('invoke', 'fixture:nyaa', 'downloadInfo', [result.releases[0]])).transport, 'torrent');
+  const loaded = await call('load', 'fixture:images', "module.exports = { coverSearch() { return { images: [] }; } };", {}, 'images', 'dsr');
+  assert.deepEqual(loaded.methods, ['coverSearch']);
+  assert.deepEqual(await call('invoke', 'fixture:images', 'coverSearch', [{ text: 'fixture' }]), { images: [] });
 });
