@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node --test test/*.test.cjs",
     "test:live": "node test/run.js",
-    "test:globalgrey:live": "node test/globalgrey-live.cjs"
+    "test:globalgrey:live": "node test/globalgrey-live.cjs",
+    "test:libertyarchive:live": "node test/libertyarchive-live.cjs"
   },
   "devDependencies": {
     "cheerio": "1.0.0-rc.12"

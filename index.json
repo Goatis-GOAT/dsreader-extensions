@@ -4,6 +4,33 @@
   "description": "Whole-book sources, light novel metadata and optional torrent discovery",
   "extensions": [
     {
+      "id": "libertyarchive",
+      "name": "The Liberty Archive",
+      "version": "1.0.0",
+      "role": "releases",
+      "description": "Historic collection torrents. Searches archive labels and filenames; results are whole collections, not individual books. EPUB/PDF/CBZ collections shown by default. Requires a DSReader version with PDF torrent import support. Peer availability is unknown.",
+      "kind": "book",
+      "lang": "en",
+      "site": "https://freecapitalists.org",
+      "script": "extensions/libertyarchive.js",
+      "contentRating": "SAFE",
+      "releaseOptions": {
+        "relay": false,
+        "categories": [
+          { "id": "books", "label": "Books collection" },
+          { "id": "journals", "label": "Journals collection" },
+          { "id": "all", "label": "All archive collections" }
+        ],
+        "bookTypeFilters": {
+          "default": "readable",
+          "options": [
+            { "id": "readable", "label": "Collections with EPUB/PDF/CBZ" },
+            { "id": "all", "label": "All formats (media cannot import)" }
+          ]
+        }
+      }
+    },
+    {
       "id": "globalgrey",
       "name": "Global Grey",
       "version": "1.0.0",
