@@ -4,7 +4,8 @@
   "description": "A DSReader extension repository",
   "scripts": {
     "test": "node --test test/*.test.cjs",
-    "test:live": "node test/run.js"
+    "test:live": "node test/run.js",
+    "test:globalgrey:live": "node test/globalgrey-live.cjs"
   },
   "devDependencies": {
     "cheerio": "1.0.0-rc.12"

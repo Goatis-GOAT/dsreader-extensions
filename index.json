@@ -4,6 +4,22 @@
   "description": "Whole-book sources, light novel metadata and optional torrent discovery",
   "extensions": [
     {
+      "id": "globalgrey",
+      "name": "Global Grey",
+      "version": "1.0.0",
+      "role": "catalogue",
+      "description": "Classic books with EPUB/PDF downloads. Browse categories and authors; search titles and available author hints from the public sitemap.",
+      "kind": "book",
+      "lang": "en",
+      "site": "https://www.globalgreyebooks.com",
+      "script": "extensions/globalgrey.js",
+      "contentRating": "MATURE",
+      "integration": {
+        "origins": ["https://www.globalgreyebooks.com"],
+        "downloadOnly": true
+      }
+    },
+    {
       "id": "ranobedb",
       "name": "RanobeDB Covers",
       "version": "1.1.0",
