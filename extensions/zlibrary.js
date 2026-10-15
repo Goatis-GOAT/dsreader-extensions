@@ -128,6 +128,12 @@ async function page(path, preferredBase) {
   if (!response.ok) throw new Error('Z-Library could not load this page (' + response.status + ').');
   const html = await response.text();
   if (html.length > 6000000) throw new Error('Z-Library returned an oversized page.');
+  // The app may reuse a domain the user successfully opened in its browser.
+  // Resolve book links against that actual, trusted response origin.
+  if (response.url) {
+    const actual = origin(new URL(response.url).origin);
+    if (actual && SEEDS.includes(new URL(actual).hostname)) base = actual;
+  }
   return { $: load(html), base }; // only page DOM, never account state, is parsed
 }
 function cover($, element, base) {
@@ -201,8 +207,10 @@ function size(text) {
   const m = /(\d+(?:\.\d+)?)\s*(KB|MB|GB|B)\b/i.exec(text);
   return m ? Math.round(Number(m[1]) * 1024 ** ['B','KB','MB','GB'].indexOf(m[2].toUpperCase())) : undefined;
 }
-async function details(id) {
-  const path = safePath(id), { $, base } = await page(path);
+async function details(id, options = {}) {
+  const preferred = typeof options.origin === 'string' ? origin(options.origin) : undefined;
+  const known = preferred && SEEDS.includes(new URL(preferred).hostname) ? preferred : undefined;
+  const path = safePath(id), { $, base } = await page(path, known);
   const title = $('h1').first().text().trim();
   if (!title) throw new Error('This book could not be found.');
   const button = $('a.dlButton').filter((_, n) => /^\/dl\/[a-z0-9]+$/i.test(localPath($(n).attr('href'), base) || '')).first();
@@ -232,8 +240,8 @@ module.exports = {
   accountStatus,
   searchOptions: () => ({ sorts: [], filters: [{ id: 'format', title: 'File type', multiple: false, options: [{ id: 'epub', label: 'EPUB' }, { id: 'pdf', label: 'PDF' }] }] }),
   details,
-  async resolveFile(id, format) {
-    const d = await details(id); // refresh the link; never fetch it in the script
+  async resolveFile(id, format, options = {}) {
+    const d = await details(id, options); // refresh the link on the saved account origin; never fetch it here
     const file = d.files.find(f => f.format === format);
     if (!file) throw new Error('The selected format is no longer available.');
     return file;

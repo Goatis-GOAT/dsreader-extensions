@@ -18,7 +18,7 @@
     {
       "id": "nyaa",
       "name": "Nyaa",
-      "version": "2.1.0",
+      "version": "2.2.0",
       "role": "releases",
       "description": "Literature torrent discovery via RSS. Optional TorBox and search relay are configured in the app.",
       "kind": "book",
@@ -75,6 +75,14 @@
             }
           ]
         }
+      },
+      "integration": {
+        "origins": [
+          "https://nyaa.si"
+        ],
+        "feed": {
+          "path": "^/\\?page=rss&c=3_[0-3]&f=0&q=[^&]*&m=1$"
+        }
       }
     },
     {
@@ -86,18 +94,118 @@
       "lang": "en",
       "site": "https://en.wikisource.org",
       "script": "extensions/wikisource.js",
-      "contentRating": "SAFE"
+      "contentRating": "SAFE",
+      "integration": {
+        "origins": [
+          "https://en.wikisource.org"
+        ],
+        "downloadOnly": true
+      }
     },
     {
       "id": "zlibrary",
       "name": "Z-Library",
-      "version": "1.0.9",
+      "version": "1.1.0",
       "role": "catalogue",
       "kind": "book",
       "script": "extensions/zlibrary.js",
       "contentRating": "MATURE",
       "description": "General books with automatic domain discovery. Sign in with your own account; downloads use your account allowance.",
-      "site": "https://en.z-lib.bz"
+      "site": "https://en.z-lib.bz",
+      "integration": {
+        "origins": [
+          "https://en.z-lib.bz",
+          "https://z-lib.sk",
+          "https://z-library.im",
+          "https://z-library.sk",
+          "https://z-lib.fm",
+          "https://z-lib.gd",
+          "https://z-lib.gl",
+          "https://z-lib.bz",
+          "https://z-lib.do",
+          "https://z-library.hn",
+          "https://z-library.la",
+          "https://italian-books.sk",
+          "https://spanish-books.sk",
+          "https://thai-books.sk",
+          "https://japanese-books.sk",
+          "https://frenchbooks.sk",
+          "https://german-books.sk",
+          "https://portuguese-books.sk",
+          "https://z-lib.fo",
+          "https://urdu-books.sk",
+          "https://z-library.ec",
+          "https://czechbooks.sk",
+          "https://librella.fi",
+          "https://librella.tw",
+          "https://lexlib.fi",
+          "https://lexlib.tw",
+          "https://bookabooki.fi",
+          "https://bookabooki.tw",
+          "https://1lib.sk",
+          "https://z-lib.sx",
+          "https://z-library.gs"
+        ],
+        "downloadOnly": true,
+        "browser": {
+          "paths": [
+            "^/$",
+            "^/profile$",
+            "^/s/",
+            "^/book/[a-z0-9]+/[^/]+\\.html$"
+          ],
+          "bookPath": "^/book/[a-z0-9]+/[^?#]+\\.html$",
+          "downloadPath": "^/dl/[a-z0-9-]+$",
+          "loginPath": "/login",
+          "registrationPath": "/registration",
+          "ignoredQuery": [
+            "ts"
+          ],
+          "readiness": [
+            {
+              "path": "^/$",
+              "pattern": "<z-bookcard\\b|<a\\b[^>]*href=[\"'][^\"']*/book/"
+            },
+            {
+              "path": "^/profile$",
+              "pattern": "caret-scroll__title|Downloads Daily Limit|loginForm|auth_modal_login"
+            },
+            {
+              "path": "^/s/",
+              "pattern": "<([a-z][a-z0-9-]*)\\b[^>]*\\bslot=[\"\\']title[\"\\'][^>]*>([\\s\\S]*?)</\\1\\s*>|nothing found|no books found|no results found|0 books",
+              "textCapture": 2
+            }
+          ]
+        },
+        "account": {
+          "loginPath": "/login",
+          "registrationPath": "/registration",
+          "rpcPath": "/rpc.php",
+          "form": {
+            "action": "login",
+            "site_mode": "books",
+            "isModal": "true",
+            "gg_json_mode": "1"
+          },
+          "emailField": "email",
+          "passwordField": "password",
+          "cookies": {
+            "id": "remix_userid",
+            "key": "remix_userkey"
+          },
+          "responsePath": "response",
+          "transferFields": [
+            "params",
+            "priorityRedirectUrl"
+          ],
+          "verifyPath": "/eapi/user/check-auth-credentials/{id}/{key}",
+          "validPath": "valid",
+          "allowancePath": "/eapi/desktop-app/popup/{id}/{key}",
+          "usedPath": "result.data.downloads-daily",
+          "limitPath": "result.data.downloads-limit",
+          "logoutPath": "/papi/user/logout"
+        }
+      }
     }
   ]
 }
